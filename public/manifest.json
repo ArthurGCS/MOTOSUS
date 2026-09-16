@@ -1,0 +1,21 @@
+{
+  "name": "MOTOSUS - Entregas do SUS",
+  "short_name": "MOTOSUS",
+  "description": "Logística e entrega de medicamentos das UBSs e Alto Custo pelo SUS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#005CAB",
+  "theme_color": "#005CAB",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

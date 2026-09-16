@@ -1,0 +1,292 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  PACIENTE
+  FARMACEUTICO
+  ENTREGADOR
+  ADMIN
+}
+
+enum MedicationCategory {
+  BASICO
+  ALTO_CUSTO
+  CONTROLADO
+}
+
+enum PrescriptionStatus {
+  PENDENTE_VALIDACAO
+  VALIDADA
+  REJEITADA
+  EXPIRADA
+}
+
+enum OrderStatus {
+  CRIADO
+  RECEITA_EM_ANALISE
+  APROVADO_PREPARACAO
+  AGUARDANDO_COLETA
+  EM_ROTA
+  ENTREGUE
+  FALHA_ENTREGA
+  CANCELADO
+  RECUSADO
+}
+
+enum DeliveryStatus {
+  PLANEJADA
+  ACEITA_PELO_MOTOBOY
+  COLETADA_NO_POLO
+  EM_DESLOCAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
+model Polo {
+  id              String          @id @default(uuid())
+  nome            String
+  codigoCnes      String?         @unique @map("codigo_cnes")
+  enderecoRua     String          @map("endereco_rua")
+  enderecoNumero  String          @map("endereco_numero")
+  enderecoBairro  String          @map("endereco_bairro")
+  enderecoCidade  String          @map("endereco_cidade")
+  enderecoUf      String          @default("SP") @map("endereco_uf")
+  enderecoCep     String          @map("endereco_cep")
+  latitude        Float?
+  longitude       Float?
+  telefone        String?
+  ativo           Boolean         @default(true)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  users           User[]
+  stockItems      StockItem[]
+  orders          Order[]
+  deliveryRoutes  DeliveryRoute[]
+
+  @@map("polos")
+}
+
+model User {
+  id                  String          @id @default(uuid())
+  nomeCompleto        String          @map("nome_completo")
+  email               String          @unique
+  senhaHash           String          @map("senha_hash")
+  cpf                 String          @unique
+  cartaoSus           String?         @unique @map("cartao_sus")
+  telefone            String
+  dataNascimento      DateTime?       @map("data_nascimento")
+  role                UserRole        @default(PACIENTE)
+  poloId              String?         @map("polo_id")
+  polo                Polo?           @relation(fields: [poloId], references: [id])
+  
+  enderecoRua         String?         @map("endereco_rua")
+  enderecoNumero      String?         @map("endereco_numero")
+  enderecoComplemento String?         @map("endereco_complemento")
+  enderecoBairro      String?         @map("endereco_bairro")
+  enderecoCidade      String?         @map("endereco_cidade")
+  enderecoUf          String?         @default("SP") @map("endereco_uf")
+  enderecoCep         String?         @map("endereco_cep")
+  latitude            Float?
+  longitude           Float?
+  ativo               Boolean         @default(true)
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  driverProfile       DriverProfile?
+  prescriptions       Prescription[]  @relation("PatientPrescriptions")
+  validatedPrescriptions Prescription[] @relation("ValidatedByPharmacist")
+  orders              Order[]         @relation("PatientOrders")
+  deliveryRoutes      DeliveryRoute[] @relation("DriverRoutes")
+  trackingEvents      OrderTrackingEvent[]
+
+  @@map("users")
+}
+
+model DriverProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cnh             String
+  cnhCategoria    String   @default("A") @map("cnh_categoria")
+  placaMoto       String   @map("placa_moto")
+  modeloMoto      String   @map("modelo_moto")
+  disponivel      Boolean  @default(true)
+  emRotaAtiva     Boolean  @default(false) @map("em_rota_ativa")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("driver_profiles")
+}
+
+model Medication {
+  id                    String              @id @default(uuid())
+  codigoCatmat          String?             @unique @map("codigo_catmat")
+  nomeComercial         String?             @map("nome_comercial")
+  principioAtivo        String              @map("principio_ativo")
+  dosagem               String
+  formaFarmaceutica     String              @map("forma_farmaceutica")
+  categoria             MedicationCategory  @default(BASICO)
+  exigeReceita          Boolean             @default(true) @map("exige_receita")
+  temperaturaControlada Boolean             @default(false) @map("temperatura_controlada")
+  instrucoesArmazenamento String?           @map("instrucoes_armazenamento")
+  ativo                 Boolean             @default(true)
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+
+  stockItems            StockItem[]
+  orderItems            OrderItem[]
+
+  @@map("medications")
+}
+
+model StockItem {
+  id                    String      @id @default(uuid())
+  poloId                String      @map("polo_id")
+  polo                  Polo        @relation(fields: [poloId], references: [id], onDelete: Cascade)
+  medicationId          String      @map("medication_id")
+  medication            Medication  @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  lote                  String
+  dataValidade          DateTime    @map("data_validade")
+  quantidadeDisponivel  Int         @default(0) @map("quantidade_disponivel")
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+
+  @@unique([poloId, medicationId, lote])
+  @@map("stock_items")
+}
+
+model Prescription {
+  id                    String              @id @default(uuid())
+  pacienteId            String              @map("paciente_id")
+  paciente              User                @relation("PatientPrescriptions", fields: [pacienteId], references: [id], onDelete: Cascade)
+  medicoNome            String              @map("medico_nome")
+  medicoCrm             String              @map("medico_crm")
+  medicoUfCrm           String              @map("medico_uf_crm")
+  dataEmissao           DateTime            @map("data_emissao")
+  dataValidade          DateTime            @map("data_validade")
+  arquivoReceitaUrl     String              @map("arquivo_receita_url")
+  status                PrescriptionStatus  @default(PENDENTE_VALIDACAO)
+  observacoesFarmaceutico String?           @map("observacoes_farmaceutico")
+  validadoPorId         String?             @map("validado_por")
+  validadoPor           User?               @relation("ValidatedByPharmacist", fields: [validadoPorId], references: [id])
+  validadoEm            DateTime?           @map("validado_em")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+
+  orders                Order[]
+
+  @@map("prescriptions")
+}
+
+model Order {
+  id                    String          @id @default(uuid())
+  protocolo             String          @unique
+  pacienteId            String          @map("paciente_id")
+  paciente              User            @relation("PatientOrders", fields: [pacienteId], references: [id], onDelete: Restrict)
+  poloOrigemId          String          @map("polo_origem_id")
+  poloOrigem            Polo            @relation(fields: [poloOrigemId], references: [id], onDelete: Restrict)
+  prescriptionId        String?         @map("prescription_id")
+  prescription          Prescription?   @relation(fields: [prescriptionId], references: [id], onDelete: SetNull)
+  status                OrderStatus     @default(CRIADO)
+
+  enderecoEntregaRua    String          @map("endereco_entrega_rua")
+  enderecoEntregaNumero String          @map("endereco_entrega_numero")
+  enderecoEntregaComplemento String?    @map("endereco_entrega_complemento")
+  enderecoEntregaBairro String          @map("endereco_entrega_bairro")
+  enderecoEntregaCidade String          @map("endereco_entrega_cidade")
+  enderecoEntregaUf     String          @default("SP") @map("endereco_entrega_uf")
+  enderecoEntregaCep    String          @map("endereco_entrega_cep")
+  latitudeEntrega       Float?          @map("latitude_entrega")
+  longitudeEntrega      Float?          @map("longitude_entrega")
+
+  observacaoPaciente    String?         @map("observacao_paciente")
+  justificativaRecusa   String?         @map("justificativa_recusa")
+  dataPrevisaoEntrega   DateTime?       @map("data_previsao_entrega")
+  createdAt             DateTime        @default(now()) @map("created_at")
+  updatedAt             DateTime        @updatedAt @map("updated_at")
+
+  items                 OrderItem[]
+  deliveryStops         DeliveryStop[]
+  trackingEvents        OrderTrackingEvent[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id                    String      @id @default(uuid())
+  orderId               String      @map("order_id")
+  order                 Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  medicationId          String      @map("medication_id")
+  medication            Medication  @relation(fields: [medicationId], references: [id], onDelete: Restrict)
+  quantidadeSolicitada  Int         @map("quantidade_solicitada")
+  quantidadeAtendida    Int         @default(0) @map("quantidade_atendida")
+  loteAtendido          String?     @map("lote_atendido")
+  createdAt             DateTime    @default(now()) @map("created_at")
+
+  @@map("order_items")
+}
+
+model DeliveryRoute {
+  id                  String          @id @default(uuid())
+  codigoRota          String          @unique @map("codigo_rota")
+  poloId              String          @map("polo_id")
+  polo                Polo            @relation(fields: [poloId], references: [id], onDelete: Restrict)
+  entregadorId        String?         @map("entregador_id")
+  entregador          User?           @relation("DriverRoutes", fields: [entregadorId], references: [id], onDelete: SetNull)
+  status              DeliveryStatus  @default(PLANEJADA)
+  iniciadaEm          DateTime?       @map("iniciada_em")
+  finalizadaEm        DateTime?       @map("finalizada_em")
+  distanciaEstimadaKm Float?          @map("distancia_estimada_km")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  stops               DeliveryStop[]
+
+  @@map("delivery_routes")
+}
+
+model DeliveryStop {
+  id                    String        @id @default(uuid())
+  routeId               String        @map("route_id")
+  route                 DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  orderId               String        @map("order_id")
+  order                 Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  ordemEntrega          Int           @map("ordem_entrega")
+  status                OrderStatus   @default(EM_ROTA)
+  horarioChegada        DateTime?     @map("horario_chegada")
+  horarioConclusao      DateTime?     @map("horario_conclusao")
+  fotoComprovanteUrl    String?       @map("foto_comprovante_url")
+  assinaturaDigitalUrl  String?       @map("assinatura_digital_url")
+  nomeRecebedor         String?       @map("nome_recebedor")
+  parentescoOuTipo      String?       @map("parentesco_ou_tipo")
+  documentoRecebedor    String?       @map("documento_recebedor")
+  latitudeConfirmacao   Float?        @map("latitude_confirmacao")
+  longitudeConfirmacao  Float?        @map("longitude_confirmacao")
+  motivoInsucesso       String?       @map("motivo_insucesso")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  @@unique([routeId, orderId])
+  @@map("delivery_stops")
+}
+
+model OrderTrackingEvent {
+  id            String      @id @default(uuid())
+  orderId       String      @map("order_id")
+  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status        OrderStatus
+  titulo        String
+  descricao     String
+  registradoPorId String?   @map("registrado_por")
+  registradoPor User?       @relation(fields: [registradoPorId], references: [id])
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@map("order_tracking_events")
+}
