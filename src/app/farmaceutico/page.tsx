@@ -15,11 +15,32 @@ export default function FarmaceuticoPage() {
   const [activeView, setActiveView] = useState<"kanban" | "estoque">("kanban");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
-  const handleUpdateOrderStatus = (
+  const fetchOrders = async () => {
+    try {
+      const res = await fetch("/api/orders");
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data && json.data.length > 0) {
+          setOrders(json.data);
+        }
+      }
+    } catch (e) {
+      // fallback
+    }
+  };
+
+  React.useEffect(() => {
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleUpdateOrderStatus = async (
     orderId: string,
     newStatus: OrderStatus,
     updatedData?: { lote?: string; justificativa?: string; parecer?: string }
   ) => {
+    // Optimistic UI update
     setOrders((prev) =>
       prev.map((ord) => {
         if (ord.id === orderId) {
@@ -46,6 +67,22 @@ export default function FarmaceuticoPage() {
         return ord;
       })
     );
+
+    try {
+      await fetch(`/api/orders/${orderId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: newStatus,
+          lote: updatedData?.lote,
+          justificativa: updatedData?.justificativa,
+          parecer: updatedData?.parecer,
+        }),
+      });
+      fetchOrders();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const urgentCount = orders.filter(

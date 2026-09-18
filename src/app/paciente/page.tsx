@@ -33,8 +33,28 @@ export default function PacientePage() {
     null
   );
 
+  const fetchOrders = async () => {
+    try {
+      const res = await fetch("/api/orders");
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data && json.data.length > 0) {
+          setOrders(json.data);
+        }
+      }
+    } catch (e) {
+      // fallback to state
+    }
+  };
+
+  React.useEffect(() => {
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleOrderCreated = (newOrder: Order) => {
-    setOrders([newOrder, ...orders]);
+    setOrders((prev) => [newOrder, ...prev.filter((o) => o.id !== newOrder.id)]);
     setActiveTab("pedidos");
   };
 

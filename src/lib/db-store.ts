@@ -189,4 +189,45 @@ export const db = {
     }
     return globalMedications;
   },
+
+  resetToDefault: () => {
+    globalOrders = JSON.parse(JSON.stringify(MOCK_ORDERS));
+    globalMedications = JSON.parse(JSON.stringify(MOCK_MEDICATIONS));
+    globalPrescriptions = JSON.parse(JSON.stringify(MOCK_PRESCRIPTIONS));
+    globalTrackingEvents = [
+      {
+        id: "evt-1",
+        order_id: "ord-1",
+        status: "CRIADO",
+        titulo: "Pedido Registrado no SUS",
+        descricao: "Pedido criado e enviado para triagem no Polo São Paulo Sul.",
+        created_at: "2026-09-15T08:30:00Z",
+      },
+      {
+        id: "evt-2",
+        order_id: "ord-1",
+        status: "RECEITA_EM_ANALISE",
+        titulo: "Receita Médica em Validação",
+        descricao: "Farmacêutico responsável iniciou a conferência do CRM e dosagem.",
+        created_at: "2026-09-15T08:45:00Z",
+      },
+      {
+        id: "evt-3",
+        order_id: "ord-1",
+        status: "APROVADO_PREPARACAO",
+        titulo: "Receita Aprovada & Medicamento Separado",
+        descricao: "Lotes LT-LOS-9982 e LT-INS-2026 conferidos e embalados em caixa térmica.",
+        created_at: "2026-09-15T09:15:00Z",
+      },
+      {
+        id: "evt-4",
+        order_id: "ord-1",
+        status: "EM_ROTA",
+        titulo: "Motoboy em Deslocamento",
+        descricao: "Entregador Carlos E. (Moto ABC-1234) coletou o pacote e iniciou a rota de entrega.",
+        created_at: "2026-09-15T10:15:00Z",
+      },
+    ];
+    return true;
+  },
 };

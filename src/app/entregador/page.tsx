@@ -1,21 +1,22 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Bike,
   MapPin,
   CheckCircle2,
   Camera,
-  PenTool,
   Navigation,
   ArrowLeft,
   ShieldCheck,
-  Phone,
   ThermometerSnowflake,
   Package,
   X,
+  UploadCloud,
+  Check,
 } from "lucide-react";
+import { SignaturePad } from "@/components/entregador/SignaturePad";
 import { MOCK_ORDERS } from "@/lib/mock-data";
 import { Order, OrderStatus } from "@/lib/types";
 
@@ -24,24 +25,70 @@ export default function EntregadorPage() {
   const [confirmingOrder, setConfirmingOrder] = useState<Order | null>(null);
   const [nomeRecebedor, setNomeRecebedor] = useState("");
   const [docRecebedor, setDocRecebedor] = useState("");
-  const [fotoTirada, setFotoTirada] = useState(false);
-  const [assinaturaFeita, setAssinaturaFeita] = useState(false);
+  const [fotoUrl, setFotoUrl] = useState<string | null>(null);
+  const [hasSignature, setHasSignature] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleStartRoute = (orderId: string) => {
+  const fetchOrders = async () => {
+    try {
+      const res = await fetch("/api/orders");
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data && json.data.length > 0) {
+          setOrders(json.data);
+        }
+      }
+    } catch (e) {
+      // fallback
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleStartRoute = async (orderId: string) => {
+    // Optimistic UI update
     setOrders((prev) =>
       prev.map((o) =>
         o.id === orderId ? { ...o, status: "EM_ROTA" as OrderStatus } : o
       )
     );
+
+    try {
+      await fetch(`/api/orders/${orderId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "EM_ROTA" }),
+      });
+      fetchOrders();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleCompleteDelivery = () => {
+  const handleSimulatePhoto = () => {
+    setFotoUrl(
+      "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&auto=format&fit=crop&q=60"
+    );
+  };
+
+  const handleCompleteDelivery = async () => {
     if (!confirmingOrder) return;
     if (!nomeRecebedor.trim() || !docRecebedor.trim()) {
-      alert("Por favor, preencha o nome e documento do recebedor.");
+      alert("Por favor, preencha o nome e documento de quem recebeu o medicamento.");
+      return;
+    }
+    if (!hasSignature) {
+      alert("Por favor, colete a assinatura/rubrica do recebedor no quadro digital.");
       return;
     }
 
+    setIsSubmitting(true);
+
+    // Optimistic UI update
     setOrders((prev) =>
       prev.map((o) =>
         o.id === confirmingOrder.id
@@ -50,11 +97,28 @@ export default function EntregadorPage() {
       )
     );
 
-    setConfirmingOrder(null);
-    setNomeRecebedor("");
-    setDocRecebedor("");
-    setFotoTirada(false);
-    setAssinaturaFeita(false);
+    try {
+      await fetch(`/api/orders/${confirmingOrder.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "ENTREGUE",
+          nome_recebedor: nomeRecebedor,
+          documento_recebedor: docRecebedor,
+          foto_comprovante: fotoUrl || "foto_comprovante_entregue.jpg",
+        }),
+      });
+      fetchOrders();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSubmitting(false);
+      setConfirmingOrder(null);
+      setNomeRecebedor("");
+      setDocRecebedor("");
+      setFotoUrl(null);
+      setHasSignature(false);
+    }
   };
 
   const pendingPickup = orders.filter((o) => o.status === "AGUARDANDO_COLETA");
@@ -62,7 +126,7 @@ export default function EntregadorPage() {
   const completed = orders.filter((o) => o.status === "ENTREGUE");
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white pb-16">
+    <div className="min-h-screen bg-slate-900 text-white pb-24">
       {/* Header Motoboy */}
       <header className="bg-slate-950 border-b border-slate-800 p-4 sticky top-0 z-40">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -98,7 +162,7 @@ export default function EntregadorPage() {
       {/* Main Content */}
       <main className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
         {/* Rota Ativa Card */}
-        <div className="bg-gradient-to-r from-amber-600/30 to-amber-900/40 border border-amber-500/40 p-5 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="bg-gradient-to-r from-amber-600/30 to-amber-900/40 border border-amber-500/40 p-5 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
           <div>
             <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">
               Rota Centralizada do Dia
@@ -119,7 +183,7 @@ export default function EntregadorPage() {
               </span>
             </div>
             <div className="bg-slate-900/90 px-3.5 py-2 rounded-xl border border-slate-800 text-center">
-              <span className="text-slate-400 block text-[10px]">Aguardando retirada</span>
+              <span className="text-slate-400 block text-[10px]">No polo</span>
               <span className="font-black text-blue-400 text-base">
                 {pendingPickup.length}
               </span>
@@ -142,7 +206,7 @@ export default function EntregadorPage() {
 
           {inTransit.length === 0 ? (
             <div className="bg-slate-800/40 border border-slate-800 rounded-2xl p-6 text-center text-xs text-slate-400">
-              Nenhuma entrega em trânsito no momento. Retire os pacotes prontos no polo abaixo.
+              Nenhuma entrega em trânsito no momento. Colete os pacotes prontos no polo abaixo.
             </div>
           ) : (
             <div className="space-y-4">
@@ -225,7 +289,11 @@ export default function EntregadorPage() {
                       </a>
 
                       <button
-                        onClick={() => setConfirmingOrder(order)}
+                        onClick={() => {
+                          setConfirmingOrder(order);
+                          setNomeRecebedor(order.paciente?.nome_completo || "");
+                          setDocRecebedor(order.paciente?.cpf || "123.456.789-00");
+                        }}
                         className="bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition-all"
                       >
                         <CheckCircle2 className="w-4 h-4" />
@@ -251,7 +319,7 @@ export default function EntregadorPage() {
               {pendingPickup.map((order) => (
                 <div
                   key={order.id}
-                  className="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  className="bg-slate-800/80 border border-slate-700 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow"
                 >
                   <div>
                     <div className="flex items-center gap-2 mb-1">
@@ -269,7 +337,7 @@ export default function EntregadorPage() {
 
                   <button
                     onClick={() => handleStartRoute(order.id)}
-                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors shrink-0"
+                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors shrink-0 shadow-md shadow-blue-600/20"
                   >
                     <Bike className="w-4 h-4" />
                     <span>Coletar no Polo & Iniciar Rota</span>
@@ -281,10 +349,10 @@ export default function EntregadorPage() {
         )}
       </main>
 
-      {/* Modal de Comprovação da Entrega com Foto e Assinatura */}
+      {/* Modal de Comprovação da Entrega com Foto e Assinatura Interativa */}
       {confirmingOrder && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-3xl max-w-lg w-full p-6 space-y-4 text-xs animate-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-800 border border-slate-700 rounded-3xl max-w-lg w-full p-6 space-y-4 text-xs animate-in zoom-in-95 my-8">
             <div className="flex items-center justify-between pb-3 border-b border-slate-700">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-400" />
@@ -294,7 +362,7 @@ export default function EntregadorPage() {
               </div>
               <button
                 onClick={() => setConfirmingOrder(null)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white p-1"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -326,7 +394,7 @@ export default function EntregadorPage() {
                   placeholder="Nome do recebedor..."
                   value={nomeRecebedor}
                   onChange={(e) => setNomeRecebedor(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
 
@@ -339,52 +407,51 @@ export default function EntregadorPage() {
                   placeholder="Ex: 12.345.678-9 ou CPF"
                   value={docRecebedor}
                   onChange={(e) => setDocRecebedor(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
             </div>
 
-            {/* Simulação de Foto & Assinatura */}
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setFotoTirada(!fotoTirada)}
-                className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all ${
-                  fotoTirada
-                    ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
-                    : "border-slate-700 bg-slate-900 text-slate-400 hover:border-slate-600"
-                }`}
-              >
-                <Camera className="w-5 h-5" />
-                <span className="font-bold">
-                  {fotoTirada ? "✓ Foto Anexada" : "Capturar Foto"}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAssinaturaFeita(!assinaturaFeita)}
-                className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all ${
-                  assinaturaFeita
-                    ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
-                    : "border-slate-700 bg-slate-900 text-slate-400 hover:border-slate-600"
-                }`}
-              >
-                <PenTool className="w-5 h-5" />
-                <span className="font-bold">
-                  {assinaturaFeita ? "✓ Assinatura Digital" : "Coletar Rubrica"}
-                </span>
-              </button>
+            {/* Foto do Pacote */}
+            <div>
+              <label className="block text-slate-300 font-bold mb-1">
+                Foto do Pacote de Medicamentos no Local:
+              </label>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleSimulatePhoto}
+                  className={`p-3 rounded-xl border flex-1 flex items-center justify-center gap-2 transition-all ${
+                    fotoUrl
+                      ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+                      : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600"
+                  }`}
+                >
+                  <Camera className="w-4 h-4" />
+                  <span className="font-bold">
+                    {fotoUrl ? "✓ Foto Capturada" : "Simular Foto da Entrega"}
+                  </span>
+                </button>
+              </div>
             </div>
+
+            {/* Signature Pad Interativo */}
+            <SignaturePad onSignatureChange={(valid) => setHasSignature(valid)} />
 
             {/* Botão de Finalização */}
             <div className="pt-3 border-t border-slate-700">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={handleCompleteDelivery}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3.5 rounded-xl transition-all shadow-lg shadow-emerald-600/30 text-xs"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black py-3.5 rounded-xl transition-all shadow-lg shadow-emerald-600/30 text-xs flex items-center justify-center gap-2"
               >
-                Registrar Entrega Concluída no SUS
+                <CheckCircle2 className="w-4 h-4" />
+                <span>
+                  {isSubmitting
+                    ? "Registrando Entrega..."
+                    : "Registrar Entrega Concluída no SUS"}
+                </span>
               </button>
             </div>
           </div>

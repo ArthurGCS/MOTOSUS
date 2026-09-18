@@ -71,7 +71,7 @@ export const RequestMedicationView: React.FC<RequestMedicationViewProps> = ({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedMedications.length === 0) {
       alert("Por favor, selecione pelo menos um medicamento.");
@@ -80,27 +80,19 @@ export const RequestMedicationView: React.FC<RequestMedicationViewProps> = ({
 
     setIsSubmitting(true);
 
-    const protocolCode = `MOTO-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    setTimeout(() => {
-      const newOrder: Order = {
-        id: `ord-${Date.now()}`,
-        protocolo: protocolCode,
+    try {
+      const payload = {
         paciente_id: user.id,
         paciente: user,
         polo_origem_id: "polo-central-sp-sul",
         prescription_id: selectedPrescriptionId || "presc-nova",
-        status: "CRIADO",
-        endereco_entrega_rua: user.endereco_rua || "Rua Principal",
-        endereco_entrega_numero: user.endereco_numero || "100",
-        endereco_entrega_bairro: user.endereco_bairro || "Centro",
+        endereco_entrega_rua: user.endereco_rua || "Rua das Flores",
+        endereco_entrega_numero: user.endereco_numero || "250",
+        endereco_entrega_bairro: user.endereco_bairro || "Jardim das Palmeiras",
         endereco_entrega_cidade: user.endereco_cidade || "São Paulo",
         endereco_entrega_uf: user.endereco_uf || "SP",
-        endereco_entrega_cep: user.endereco_cep || "01001-000",
+        endereco_entrega_cep: user.endereco_cep || "04567-000",
         observacao_paciente: observacoes,
-        data_previsao_entrega: new Date(Date.now() + 86400000)
-          .toISOString()
-          .split("T")[0],
         items: selectedMedications.map((item, idx) => ({
           id: `item-${Date.now()}-${idx}`,
           order_id: `ord-${Date.now()}`,
@@ -108,14 +100,27 @@ export const RequestMedicationView: React.FC<RequestMedicationViewProps> = ({
           medication: item.medication,
           quantidade_solicitada: item.quantidade,
         })),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       };
 
-      onOrderCreated(newOrder);
-      setSuccessProtocol(protocolCode);
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json();
+      if (json.success && json.data) {
+        onOrderCreated(json.data);
+        setSuccessProtocol(json.data.protocolo);
+      } else {
+        alert(json.error || "Erro ao criar pedido");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Falha de conexão com a API do SUS.");
+    } finally {
       setIsSubmitting(false);
-    }, 1200);
+    }
   };
 
   if (successProtocol) {
